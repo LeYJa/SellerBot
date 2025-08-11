@@ -1,4 +1,4 @@
-app = "bot-escaparate-javi"
+app = "sellerbot"
 
 [build]
   dockerfile = "Dockerfile"
