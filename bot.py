@@ -137,7 +137,7 @@ def main():
     application.add_handler(CommandHandler("solicitarvendedor", solicitar_vendedor))
     application.add_handler(CommandHandler("aprobar", aprobar))
     application.add_handler(CommandHandler("rechazar", rechazar))
-    application.add_handler(CommandHandler("añadirarticulo", añadir_articulo))
+    application.add_handler(CommandHandler("anadirarticulo", añadir_articulo))
     application.add_handler(CommandHandler("listado", listado))
     application.add_handler(CommandHandler("eliminararticulo", eliminar_articulo))
     application.add_handler(CommandHandler("bajavendedor", bajavendedor))
