@@ -55,8 +55,29 @@ async def telegram_webhook(req: Request):
     elif text.startswith("/precio "):
         raw = text.split(" ", 1)[1]
         cents = euros_to_cents(raw)
-        reply = (
-    "Formato inválido (ej: 2, 2.50, 2,50, 2€)"
-    if cents is None else
-    f"{cents_to_euros(cents)}"
-)
+        reply = "Formato inválido (ej: 2, 2.50, 2,50, 2€)" if cents is None else f"{cents_to_euros(cents)}"
+    else:
+        reply = f"Eco: {text}"
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(f"{TELEGRAM_API}/sendMessage", json={
+            "chat_id": chat_id,
+            "text": reply
+        })
+
+    return {"ok": True}
+
+# --------- Registrar webhook al arrancar ----------
+@app.on_event("startup")
+async def set_webhook():
+    if not TELEGRAM_TOKEN:
+        print("Falta TELEGRAM_TOKEN")
+        return
+    if not WEBHOOK_URL or WEBHOOK_URL.startswith("http://") or "example.com" in WEBHOOK_URL:
+        print("WEBHOOK_URL no configurada aún; omitiendo setWebhook.")
+        return
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(f"{TELEGRAM_API}/setWebhook", json={
+            "url": f"{WEBHOOK_URL}/webhook"
+        })
+        print("setWebhook:", resp.status_code, resp.text)
