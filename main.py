@@ -1,40 +1,35 @@
+from fastapi import FastAPI, Request
+import httpx
 import os
-import re
-import asyncio
-import aiosqlite
-from datetime import datetime
-from aiohttp import web
-from typing import Dict, Any, Optional
 
-from telegram import (
-    Update, InlineKeyboardMarkup, InlineKeyboardButton
-)
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes,
-    ConversationHandler, MessageHandler, CallbackQueryHandler, filters
-)
+app = FastAPI()
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")  # opcional: numérico
-DB_PATH = os.getenv("DB_PATH", "/data/bot.db")
-HEALTH_PORT = int(os.getenv("PORT", "8080"))
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-# Estados de conversación
-NAME, PRICE, STOCK = range(3)
-EDIT_PRICE_WAIT, EDIT_STOCK_WAIT = range(3,5)
+@app.post("/webhook")
+async def telegram_webhook(req: Request):
+    data = await req.json()
+    chat_id = data.get("message", {}).get("chat", {}).get("id")
+    text = data.get("message", {}).get("text")
 
-def euros_to_cents(txt: str) -> Optional[int]:
-    t = txt.strip().lower().replace("€", "")
-    t = t.replace(",", ".")
-    m = re.match(r"^\s*(\d+)(?:\.(\d{1,2}))?\s*$", t)
-    if not m:
-        return None
-    euros = int(m.group(1))
-    cents = int((m.group(2) or "0").ljust(2, "0"))
-    return euros * 100 + cents
+    if chat_id and text:
+        reply = f"Hola 👋, dijiste: {text}"
+        async with httpx.AsyncClient() as client:
+            await client.post(f"{TELEGRAM_API}/sendMessage", json={
+                "chat_id": chat_id,
+                "text": reply
+            })
 
-def cents_to_euros(cents: int) -> str:
-    sign = "-" if cents < 0 else ""
+    return {"ok": True}
+
+@app.on_event("startup")
+async def set_webhook():
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{TELEGRAM_API}/setWebhook", json={
+            "url": f"{WEBHOOK_URL}/webhook"
+        })    sign = "-" if cents < 0 else ""
     c = abs(cents)
     return f"{sign}{c//100},{c%100:02d} €"
 
