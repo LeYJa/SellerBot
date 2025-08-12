@@ -292,11 +292,14 @@ def main():
     )
     application.add_handler(conv_handler)
 
-    # webhook setup
-    webhook_path = f"/webhook/{TELEGRAM_TOKEN}"
-    webhook_url = f"{WEBHOOK_URL}{webhook_path}"
-    logger.info("Starting webhook on %s", webhook_url)
-    application.run_webhook(listen="0.0.0.0", port=PORT, webhook_url=webhook_url, webhook_path=webhook_path)
+# webhook setup (v20+ compatible)
+webhook_url = f"{WEBHOOK_URL}/webhook/{TELEGRAM_TOKEN}"
+logger.info("Starting webhook on %s", webhook_url)
+application.run_webhook(
+    listen="0.0.0.0",
+    port=PORT,
+    webhook_url=webhook_url
+)
 
 if __name__ == "__main__":
     main()
