@@ -55,4 +55,8 @@ async def telegram_webhook(req: Request):
     elif text.startswith("/precio "):
         raw = text.split(" ", 1)[1]
         cents = euros_to_cents(raw)
-        reply = "Formato inválido (ej: 2, 2.50, 2,50, 2€)" if cents is None
+        reply = (
+    "Formato inválido (ej: 2, 2.50, 2,50, 2€)"
+    if cents is None else
+    f"{cents_to_euros(cents)}"
+)
