@@ -5,86 +5,71 @@ import os
 app = FastAPI()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")  # p.ej. https://sellerbot.onrender.com
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+
+# ---- Utilidades opcionales (precio) ----
+def euros_to_cents(txt: str) -> int | None:
+    t = txt.strip().lower().replace("€", "").replace(",", ".")
+    try:
+        value = float(t)
+    except ValueError:
+        return None
+    return int(round(value * 100))
+
+def cents_to_euros(cents: int) -> str:
+    sign = "-" if cents < 0 else ""
+    c = abs(cents)
+    return f"{sign}{c//100},{c%100:02d} €"
+
+# ---- Endpoints ----
+@app.get("/")
+async def health():
+    return {"status": "ok"}
 
 @app.post("/webhook")
 async def telegram_webhook(req: Request):
     data = await req.json()
-    chat_id = data.get("message", {}).get("chat", {}).get("id")
-    text = data.get("message", {}).get("text")
+    message = data.get("message") or data.get("edited_message") or {}
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    text = message.get("text", "") or ""
 
-    if chat_id and text:
-        reply = f"Hola 👋, dijiste: {text}"
-        async with httpx.AsyncClient() as client:
-            await client.post(f"{TELEGRAM_API}/sendMessage", json={
-                "chat_id": chat_id,
-                "text": reply
-            })
+    if not chat_id:
+        return {"ok": True}
+
+    # Respuesta simple de eco + demo comando /precio
+    reply_text = f"Hola 👋, dijiste: {text}"
+    if text.startswith("/precio "):
+        precio_txt = text.split(" ", 1)[1]
+        cents = euros_to_cents(precio_txt)
+        if cents is None:
+            reply_text = "Formato de precio inválido. Ejemplos: 2, 2.50, 2,50, 2€"
+        else:
+            reply_text = f"Precio normalizado: {cents_to_euros(cents)}"
+
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{TELEGRAM_API}/sendMessage", json={
+            "chat_id": chat_id,
+            "text": reply_text
+        })
 
     return {"ok": True}
 
 @app.on_event("startup")
 async def set_webhook():
+    # Evita intentos con URL vacía o de placeholder
+    if not TELEGRAM_TOKEN:
+        print("Falta TELEGRAM_TOKEN")
+        return
+    if not WEBHOOK_URL or WEBHOOK_URL.startswith("http://") or "example.com" in WEBHOOK_URL:
+        print("WEBHOOK_URL no configurada correctamente; omitiendo setWebhook.")
+        return
     async with httpx.AsyncClient() as client:
-        await client.post(f"{TELEGRAM_API}/setWebhook", json={
+        resp = await client.post(f"{TELEGRAM_API}/setWebhook", json={
             "url": f"{WEBHOOK_URL}/webhook"
-        })    sign = "-" if cents < 0 else ""
-    c = abs(cents)
-    return f"{sign}{c//100},{c%100:02d} €"
-
-async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-          user_id INTEGER PRIMARY KEY,
-          username TEXT,
-          role TEXT CHECK(role IN ('admin','seller','buyer')) NOT NULL DEFAULT 'buyer'
-        )""")
-        await db.execute("""
-        CREATE TABLE IF NOT EXISTS products (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          seller_id INTEGER NOT NULL,
-          name TEXT NOT NULL,
-          price_cents INTEGER NOT NULL,
-          stock INTEGER NOT NULL,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY(seller_id) REFERENCES users(user_id)
-        )""")
-        await db.commit()
-
-async def get_user(db, user_id: int) -> Optional[Dict[str, Any]]:
-    cur = await db.execute("SELECT user_id, username, role FROM users WHERE user_id = ?", (user_id,))
-    row = await cur.fetchone()
-    if row:
-        return {"user_id": row[0], "username": row[1], "role": row[2]}
-    return None
-
-async def ensure_user(update: Update) -> Dict[str, Any]:
-    uid = update.effective_user.id
-    uname = update.effective_user.username
-    async with aiosqlite.connect(DB_PATH) as db:
-        u = await get_user(db, uid)
-        if not u:
-            role = "buyer"
-            if ADMIN_USER_ID and str(uid) == str(ADMIN_USER_ID):
-                role = "admin"
-            await db.execute("INSERT INTO users(user_id, username, role) VALUES(?,?,?)", (uid, uname, role))
-            await db.commit()
-            u = {"user_id": uid, "username": uname, "role": role}
-        else:
-            # actualizar username por si cambia
-            if u["username"] != uname:
-                await db.execute("UPDATE users SET username=? WHERE user_id=?", (uname, uid))
-                await db.commit()
-                u["username"] = uname
-        return u
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    u = await ensure_user(update)
-    if u["role"] == "admin":
-        text = "Hola admin. Puedes aprobar vendedores desde las solicitudes. Usa /catalogo para ver el escaparate."
-    elif u["role"] == "seller":
+        })
+        print("setWebhook status:", resp.status_code, resp.text)    elif u["role"] == "seller":
         text = "Hola vendedor. Usa /producto_nuevo o /producto para añadir. /mis_productos para editar. /catalogo para ver."
     else:
         text = "Bienvenido. Puedes ver el catálogo con /catalogo. Si quieres vender, usa /solicitar_vendedor."
